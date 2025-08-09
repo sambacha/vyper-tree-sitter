@@ -17,17 +17,36 @@ enum TokenType {
   DEDENT,
 };
 
+#define INITIAL_INDENT_CAPACITY 16
+#define MAX_REASONABLE_INDENT_DEPTH 64
+#define MAX_PENDING_DEDENTS 32
+
 typedef struct {
   uint32_t *indents;
   uint32_t indent_count;
   uint32_t indent_capacity;
   bool expecting_indent;
+  uint32_t pending_dedents; // Queue of pending DEDENT tokens to emit
 } Scanner;
 
 static inline void indent_push(Scanner *scanner, uint32_t indent) {
   if (scanner->indent_count == scanner->indent_capacity) {
-    scanner->indent_capacity *= 2;
-    scanner->indents = realloc(scanner->indents, scanner->indent_capacity * sizeof(uint32_t));
+    // Cap growth at reasonable limit to prevent excessive memory usage
+    uint32_t new_capacity = scanner->indent_capacity * 2;
+    if (new_capacity > MAX_REASONABLE_INDENT_DEPTH) {
+      new_capacity = MAX_REASONABLE_INDENT_DEPTH;
+    }
+    if (scanner->indent_count >= MAX_REASONABLE_INDENT_DEPTH) {
+      // Prevent stack overflow from malicious input
+      return;
+    }
+    uint32_t *new_indents = realloc(scanner->indents, new_capacity * sizeof(uint32_t));
+    if (new_indents == NULL) {
+      // Memory allocation failed - fall back gracefully
+      return;
+    }
+    scanner->indent_capacity = new_capacity;
+    scanner->indents = new_indents;
   }
   scanner->indents[scanner->indent_count++] = indent;
   DEBUG_PRINT("Pushed indent: %u (stack size: %u)\n", indent, scanner->indent_count);
@@ -51,10 +70,11 @@ static inline uint32_t indent_top(Scanner *scanner) {
 
 void *tree_sitter_vyper_external_scanner_create() {
   Scanner *scanner = calloc(1, sizeof(Scanner));
-  scanner->indent_capacity = 16;
+  scanner->indent_capacity = INITIAL_INDENT_CAPACITY;
   scanner->indents = calloc(scanner->indent_capacity, sizeof(uint32_t));
   indent_push(scanner, 0);  // Initial indent level is 0
   scanner->expecting_indent = false;
+  scanner->pending_dedents = 0;
   DEBUG_PRINT("Scanner created\n");
   return scanner;
 }
@@ -93,7 +113,13 @@ unsigned tree_sitter_vyper_external_scanner_serialize(
     size += sizeof(bool);
   }
 
-  DEBUG_PRINT("Serialized %u bytes (indent_count: %u)\n", size, scanner->indent_count);
+  // Store pending_dedents count
+  if (size + sizeof(uint32_t) <= TREE_SITTER_SERIALIZATION_BUFFER_SIZE) {
+    memcpy(buffer + size, &scanner->pending_dedents, sizeof(uint32_t));
+    size += sizeof(uint32_t);
+  }
+
+  DEBUG_PRINT("Serialized %u bytes (indent_count: %u, pending_dedents: %u)\n", size, scanner->indent_count, scanner->pending_dedents);
   return size;
 }
 
@@ -105,6 +131,7 @@ void tree_sitter_vyper_external_scanner_deserialize(
   Scanner *scanner = (Scanner *)payload;
   scanner->indent_count = 0;
   scanner->expecting_indent = false;
+  scanner->pending_dedents = 0;
 
   if (length == 0) {
     indent_push(scanner, 0);
@@ -135,11 +162,17 @@ void tree_sitter_vyper_external_scanner_deserialize(
     size += sizeof(bool);
   }
 
+  // Read pending_dedents count
+  if (size + sizeof(uint32_t) <= length) {
+    memcpy(&scanner->pending_dedents, buffer + size, sizeof(uint32_t));
+    size += sizeof(uint32_t);
+  }
+
   if (scanner->indent_count == 0) {
     indent_push(scanner, 0);
   }
 
-  DEBUG_PRINT("Deserialized %u bytes (indent_count: %u)\n", size, scanner->indent_count);
+  DEBUG_PRINT("Deserialized %u bytes (indent_count: %u, pending_dedents: %u)\n", size, scanner->indent_count, scanner->pending_dedents);
 }
 
 bool tree_sitter_vyper_external_scanner_scan(
@@ -149,18 +182,41 @@ bool tree_sitter_vyper_external_scanner_scan(
 ) {
   Scanner *scanner = (Scanner *)payload;
   
-  DEBUG_PRINT("Scan called - valid symbols: NEWLINE=%d, INDENT=%d, DEDENT=%d\n",
-    valid_symbols[NEWLINE], valid_symbols[INDENT], valid_symbols[DEDENT]);
-  DEBUG_PRINT("Current lookahead: '%c' (0x%02x)\n", 
-    lexer->lookahead >= 32 ? lexer->lookahead : '?', lexer->lookahead);
+  // Debug output only if TREE_SITTER_DEBUG environment variable is set
+  #ifdef TREE_SITTER_DEBUG
+  fprintf(stderr, "=== SCANNER CALL ===\n");
+  fprintf(stderr, "Valid symbols: N:%d I:%d D:%d\n", valid_symbols[NEWLINE], valid_symbols[INDENT], valid_symbols[DEDENT]);
+  fprintf(stderr, "Lookahead: '%c' (0x%02x)\n", lexer->lookahead >= 32 ? lexer->lookahead : '?', lexer->lookahead);
+  fprintf(stderr, "Indent stack: [");
+  for (uint32_t i = 0; i < scanner->indent_count; i++) {
+    fprintf(stderr, "%u", scanner->indents[i]);
+    if (i < scanner->indent_count - 1) fprintf(stderr, ",");
+  }
+  fprintf(stderr, "] (size=%u) pending_dedents=%u\n", scanner->indent_count, scanner->pending_dedents);
+  #endif
+
+  // Handle pending DEDENT tokens first
+  if (scanner->pending_dedents > 0 && valid_symbols[DEDENT]) {
+    scanner->pending_dedents--;
+    if (scanner->indent_count > 1) {
+      indent_pop(scanner);
+    }
+    lexer->result_symbol = DEDENT;
+    DEBUG_PRINT(">>> EMITTING PENDING DEDENT (remaining pending: %u, stack: %u)\n", scanner->pending_dedents, scanner->indent_count);
+    return true;
+  }
 
   // Handle EOF - emit remaining dedents
   if (lexer->lookahead == 0) {
     if (scanner->indent_count > 1) {
-      // Always try to emit DEDENT at EOF if we have indentation
+      // Queue all remaining DEDENT tokens at EOF
+      if (scanner->pending_dedents == 0) {
+        uint32_t to_queue = (scanner->indent_count > 2) ? scanner->indent_count - 2 : 0;
+        scanner->pending_dedents = (to_queue > MAX_PENDING_DEDENTS) ? MAX_PENDING_DEDENTS : to_queue;
+      }
       indent_pop(scanner);
       lexer->result_symbol = DEDENT;
-      DEBUG_PRINT("Emitting DEDENT at EOF (remaining: %u)\n", scanner->indent_count - 1);
+      DEBUG_PRINT(">>> EMITTING DEDENT at EOF (remaining: %u, pending: %u)\n", scanner->indent_count, scanner->pending_dedents);
       return true;
     }
     return false;
@@ -182,27 +238,39 @@ bool tree_sitter_vyper_external_scanner_scan(
     }
     
     uint32_t current_indent = indent_top(scanner);
-    DEBUG_PRINT("indent_size=%u current_indent=%u indent_stack_size=%u\n", indent_size, current_indent, scanner->indent_count);
+    DEBUG_PRINT("Indent analysis: size=%u current=%u stack_size=%u\n", indent_size, current_indent, scanner->indent_count);
     
     if (indent_size > current_indent && valid_symbols[INDENT]) {
       indent_push(scanner, indent_size);
       lexer->result_symbol = INDENT;
-      DEBUG_PRINT("Emitting INDENT\n");
+      DEBUG_PRINT(">>> EMITTING INDENT (new level %u)\n", indent_size);
       return true;
     } else if (indent_size < current_indent && valid_symbols[DEDENT]) {
-      // Pop indents until we reach the right level
-      while (scanner->indent_count > 1 && indent_top(scanner) > indent_size) {
-        indent_pop(scanner);
+      // Queue multiple DEDENT tokens if needed
+      uint32_t dedents_needed = 0;
+      uint32_t temp_indent_count = scanner->indent_count;
+      while (temp_indent_count > 1 && scanner->indents[temp_indent_count - 1] > indent_size) {
+        dedents_needed++;
+        temp_indent_count--;
       }
-      lexer->result_symbol = DEDENT;
-      DEBUG_PRINT("Emitting DEDENT (popped to level %u)\n", indent_top(scanner));
-      return true;
+      
+      if (dedents_needed > 0) {
+        // Emit first DEDENT immediately, queue the rest (with bounds checking)
+        uint32_t to_queue = dedents_needed - 1;
+        scanner->pending_dedents = (to_queue > MAX_PENDING_DEDENTS) ? MAX_PENDING_DEDENTS : to_queue;
+        indent_pop(scanner);
+        lexer->result_symbol = DEDENT;
+        DEBUG_PRINT(">>> EMITTING DEDENT (reduced to level %u, queued %u more)\n", indent_top(scanner), scanner->pending_dedents);
+        return true;
+      }
     } else if (indent_size == 0 && scanner->indent_count > 1 && valid_symbols[DEDENT]) {
       // Special case: when we're back at module level, ensure all blocks are closed
       indent_pop(scanner);
       lexer->result_symbol = DEDENT;
-      DEBUG_PRINT("Emitting DEDENT to return to module level (remaining levels: %u)\n", scanner->indent_count - 1);
+      DEBUG_PRINT(">>> EMITTING DEDENT to module level (remaining: %u)\n", scanner->indent_count - 1);
       return true;
+    } else {
+      DEBUG_PRINT("No token emitted (conditions not met)\n");
     }
   }
 
@@ -255,7 +323,7 @@ bool tree_sitter_vyper_external_scanner_scan(
     if (indent_size > current_indent) {
       indent_push(scanner, indent_size);
       lexer->result_symbol = INDENT;
-      DEBUG_PRINT("Emitting INDENT after newline (level %u from %u)\n", indent_size, current_indent);
+      DEBUG_PRINT(">>> EMITTING INDENT after newline (level %u from %u)\n", indent_size, current_indent);
       return true;
     }
   }
@@ -347,15 +415,24 @@ bool tree_sitter_vyper_external_scanner_scan(
       return true;
     }
   } else if (indent_size < current_indent) {
-    // Pop indents until we reach the right level
-    // We only emit one DEDENT at a time, tree-sitter will call us again for more
-    while (scanner->indent_count > 1 && indent_top(scanner) > indent_size) {
-      indent_pop(scanner);
+    // Queue multiple DEDENT tokens if needed
+    uint32_t dedents_needed = 0;
+    uint32_t temp_indent_count = scanner->indent_count;
+    while (temp_indent_count > 1 && scanner->indents[temp_indent_count - 1] > indent_size) {
+      dedents_needed++;
+      temp_indent_count--;
     }
-    lexer->result_symbol = DEDENT;
-    scanner->expecting_indent = false;
-    DEBUG_PRINT("Emitting DEDENT (back to level: %u, indent_size: %u)\n", indent_top(scanner), indent_size);
-    return true;
+    
+    if (dedents_needed > 0) {
+      // Emit first DEDENT immediately, queue the rest (with bounds checking)
+      uint32_t to_queue = dedents_needed - 1;
+      scanner->pending_dedents = (to_queue > MAX_PENDING_DEDENTS) ? MAX_PENDING_DEDENTS : to_queue;
+      indent_pop(scanner);
+      lexer->result_symbol = DEDENT;
+      scanner->expecting_indent = false;
+      DEBUG_PRINT(">>> EMITTING DEDENT (back to level: %u, indent_size: %u, queued %u more)\n", indent_top(scanner), indent_size, scanner->pending_dedents);
+      return true;
+    }
   } else if (indent_size == current_indent) {
     // Same indentation level
     if (valid_symbols[DEDENT] && scanner->indent_count > 1) {
