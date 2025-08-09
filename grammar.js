@@ -573,23 +573,79 @@ module.exports = grammar({
     not_operator: $ => prec(PREC.not, seq('not', $.expression)),
 
     boolean_operator: $ => choice(
-      prec.left(PREC.and, seq($.expression, 'and', $.expression)),
-      prec.left(PREC.or, seq($.expression, 'or', $.expression)),
+      prec.left(PREC.and, seq(
+        field('left', $.expression),
+        'and',
+        field('right', $.expression)
+      )),
+      prec.left(PREC.or, seq(
+        field('left', $.expression),
+        'or',
+        field('right', $.expression)
+      )),
     ),
 
     binary_operator: $ => choice(
-      prec.left(PREC.plus, seq($.expression, '+', $.expression)),
-      prec.left(PREC.plus, seq($.expression, '-', $.expression)),
-      prec.left(PREC.times, seq($.expression, '*', $.expression)),
-      prec.left(PREC.times, seq($.expression, '/', $.expression)),
-      prec.left(PREC.times, seq($.expression, '//', $.expression)),
-      prec.left(PREC.times, seq($.expression, '%', $.expression)),
-      prec.right(PREC.power, seq($.expression, '**', $.expression)),
-      prec.left(PREC.shift, seq($.expression, '<<', $.expression)),
-      prec.left(PREC.shift, seq($.expression, '>>', $.expression)),
-      prec.left(PREC.bitwise_and, seq($.expression, '&', $.expression)),
-      prec.left(PREC.bitwise_or, seq($.expression, '|', $.expression)),
-      prec.left(PREC.bitwise_xor, seq($.expression, '^', $.expression)),
+      prec.left(PREC.plus, seq(
+        field('left', $.expression),
+        '+',
+        field('right', $.expression)
+      )),
+      prec.left(PREC.plus, seq(
+        field('left', $.expression),
+        '-',
+        field('right', $.expression)
+      )),
+      prec.left(PREC.times, seq(
+        field('left', $.expression),
+        '*',
+        field('right', $.expression)
+      )),
+      prec.left(PREC.times, seq(
+        field('left', $.expression),
+        '/',
+        field('right', $.expression)
+      )),
+      prec.left(PREC.times, seq(
+        field('left', $.expression),
+        '//',
+        field('right', $.expression)
+      )),
+      prec.left(PREC.times, seq(
+        field('left', $.expression),
+        '%',
+        field('right', $.expression)
+      )),
+      prec.right(PREC.power, seq(
+        field('left', $.expression),
+        '**',
+        field('right', $.expression)
+      )),
+      prec.left(PREC.shift, seq(
+        field('left', $.expression),
+        '<<',
+        field('right', $.expression)
+      )),
+      prec.left(PREC.shift, seq(
+        field('left', $.expression),
+        '>>',
+        field('right', $.expression)
+      )),
+      prec.left(PREC.bitwise_and, seq(
+        field('left', $.expression),
+        '&',
+        field('right', $.expression)
+      )),
+      prec.left(PREC.bitwise_or, seq(
+        field('left', $.expression),
+        '|',
+        field('right', $.expression)
+      )),
+      prec.left(PREC.bitwise_xor, seq(
+        field('left', $.expression),
+        '^',
+        field('right', $.expression)
+      )),
     ),
 
     unary_operator: $ => prec(PREC.unary, choice(
