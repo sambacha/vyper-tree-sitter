@@ -2750,6 +2750,14 @@
         },
         {
           "type": "SYMBOL",
+          "name": "builtin_constant"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "environment_variable"
+        },
+        {
+          "type": "SYMBOL",
           "name": "attribute"
         },
         {
@@ -3078,6 +3086,18 @@
         {
           "type": "SYMBOL",
           "name": "send_call"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "len_call"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "min_max_call"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "method_id_call"
         }
       ]
     },
@@ -3350,6 +3370,86 @@
         {
           "type": "STRING",
           "value": ","
+        },
+        {
+          "type": "SYMBOL",
+          "name": "expression"
+        },
+        {
+          "type": "STRING",
+          "value": ")"
+        }
+      ]
+    },
+    "len_call": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "len"
+        },
+        {
+          "type": "STRING",
+          "value": "("
+        },
+        {
+          "type": "SYMBOL",
+          "name": "expression"
+        },
+        {
+          "type": "STRING",
+          "value": ")"
+        }
+      ]
+    },
+    "min_max_call": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "min"
+            },
+            {
+              "type": "STRING",
+              "value": "max"
+            }
+          ]
+        },
+        {
+          "type": "STRING",
+          "value": "("
+        },
+        {
+          "type": "SYMBOL",
+          "name": "expression"
+        },
+        {
+          "type": "STRING",
+          "value": ","
+        },
+        {
+          "type": "SYMBOL",
+          "name": "expression"
+        },
+        {
+          "type": "STRING",
+          "value": ")"
+        }
+      ]
+    },
+    "method_id_call": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "method_id"
+        },
+        {
+          "type": "STRING",
+          "value": "("
         },
         {
           "type": "SYMBOL",

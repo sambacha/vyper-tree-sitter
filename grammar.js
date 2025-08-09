@@ -615,6 +615,8 @@ module.exports = grammar({
     primary_expression: $ => choice(
       $.identifier,
       $.literal,
+      $.builtin_constant,
+      $.environment_variable,
       $.attribute,
       $.subscript,
       $.call,
@@ -679,6 +681,9 @@ module.exports = grammar({
       $.create_from_blueprint,
       $.raw_call,
       $.send_call,
+      $.len_call,
+      $.min_max_call,
+      $.method_id_call,
     ),
 
     empty_call: $ => seq(
@@ -746,6 +751,29 @@ module.exports = grammar({
       '(',
       $.expression,
       ',',
+      $.expression,
+      ')',
+    ),
+
+    len_call: $ => seq(
+      'len',
+      '(',
+      $.expression,
+      ')',
+    ),
+
+    min_max_call: $ => seq(
+      choice('min', 'max'),
+      '(',
+      $.expression,
+      ',',
+      $.expression,
+      ')',
+    ),
+
+    method_id_call: $ => seq(
+      'method_id',
+      '(',
       $.expression,
       ')',
     ),

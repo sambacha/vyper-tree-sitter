@@ -167,8 +167,8 @@ bool tree_sitter_vyper_external_scanner_scan(
   }
 
 
-  // Handle indentation when INDENT is valid and we're at spaces/tabs
-  if (valid_symbols[INDENT] && (lexer->lookahead == ' ' || lexer->lookahead == '\t')) {
+  // Handle indentation/dedentation when we're at spaces/tabs
+  if ((valid_symbols[INDENT] || valid_symbols[DEDENT]) && (lexer->lookahead == ' ' || lexer->lookahead == '\t')) {
     uint32_t indent_size = 0;
     
     // Count indentation
@@ -182,10 +182,26 @@ bool tree_sitter_vyper_external_scanner_scan(
     }
     
     uint32_t current_indent = indent_top(scanner);
-    if (indent_size > current_indent) {
+    DEBUG_PRINT("indent_size=%u current_indent=%u indent_stack_size=%u\n", indent_size, current_indent, scanner->indent_count);
+    
+    if (indent_size > current_indent && valid_symbols[INDENT]) {
       indent_push(scanner, indent_size);
       lexer->result_symbol = INDENT;
-      DEBUG_PRINT("Emitting INDENT (level %u from %u)\n", indent_size, current_indent);
+      DEBUG_PRINT("Emitting INDENT\n");
+      return true;
+    } else if (indent_size < current_indent && valid_symbols[DEDENT]) {
+      // Pop indents until we reach the right level
+      while (scanner->indent_count > 1 && indent_top(scanner) > indent_size) {
+        indent_pop(scanner);
+      }
+      lexer->result_symbol = DEDENT;
+      DEBUG_PRINT("Emitting DEDENT (popped to level %u)\n", indent_top(scanner));
+      return true;
+    } else if (indent_size == 0 && scanner->indent_count > 1 && valid_symbols[DEDENT]) {
+      // Special case: when we're back at module level, ensure all blocks are closed
+      indent_pop(scanner);
+      lexer->result_symbol = DEDENT;
+      DEBUG_PRINT("Emitting DEDENT to return to module level (remaining levels: %u)\n", scanner->indent_count - 1);
       return true;
     }
   }
@@ -331,23 +347,36 @@ bool tree_sitter_vyper_external_scanner_scan(
       return true;
     }
   } else if (indent_size < current_indent) {
-    if (valid_symbols[DEDENT]) {
-      // Pop indents until we reach the right level
-      // We only emit one DEDENT at a time, tree-sitter will call us again for more
-      while (scanner->indent_count > 1 && indent_top(scanner) > indent_size) {
-        indent_pop(scanner);
-      }
-      lexer->result_symbol = DEDENT;
-      scanner->expecting_indent = false;
-      DEBUG_PRINT("Emitting DEDENT (back to level: %u)\n", indent_top(scanner));
-      return true;
+    // Pop indents until we reach the right level
+    // We only emit one DEDENT at a time, tree-sitter will call us again for more
+    while (scanner->indent_count > 1 && indent_top(scanner) > indent_size) {
+      indent_pop(scanner);
     }
-  } else {
-    // Same indentation - emit NEWLINE if valid
-    if (valid_symbols[NEWLINE]) {
+    lexer->result_symbol = DEDENT;
+    scanner->expecting_indent = false;
+    DEBUG_PRINT("Emitting DEDENT (back to level: %u, indent_size: %u)\n", indent_top(scanner), indent_size);
+    return true;
+  } else if (indent_size == current_indent) {
+    // Same indentation level
+    if (valid_symbols[DEDENT] && scanner->indent_count > 1) {
+      // This handles the case where we need DEDENT to close a block at same level
+      // (like when transitioning from if-block to else at same indentation)
+      indent_pop(scanner);
+      lexer->result_symbol = DEDENT;
+      DEBUG_PRINT("Emitting DEDENT at same level (level: %u)\n", indent_top(scanner));
+      return true;
+    } else if (valid_symbols[NEWLINE]) {
       lexer->result_symbol = NEWLINE;
       scanner->expecting_indent = false;
       DEBUG_PRINT("Emitting NEWLINE (same indent level)\n");
+      return true;
+    }
+  } else {
+    // Increased indentation
+    if (indent_size > current_indent && valid_symbols[INDENT]) {
+      indent_push(scanner, indent_size);
+      lexer->result_symbol = INDENT;
+      DEBUG_PRINT("Emitting INDENT (level %u from %u)\n", indent_size, current_indent);
       return true;
     }
   }

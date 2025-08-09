@@ -472,6 +472,11 @@
     }
   },
   {
+    "type": "builtin_constant",
+    "named": true,
+    "fields": {}
+  },
+  {
     "type": "builtin_type",
     "named": true,
     "fields": {}
@@ -833,6 +838,11 @@
         }
       ]
     }
+  },
+  {
+    "type": "environment_variable",
+    "named": true,
+    "fields": {}
   },
   {
     "type": "event_body",
@@ -1319,6 +1329,21 @@
     }
   },
   {
+    "type": "len_call",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "expression",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "list",
     "named": true,
     "fields": {},
@@ -1427,6 +1452,36 @@
       "types": [
         {
           "type": "type",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "method_id_call",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "expression",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "min_max_call",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "expression",
           "named": true
         }
       ]
@@ -1611,11 +1666,19 @@
           "named": true
         },
         {
+          "type": "builtin_constant",
+          "named": true
+        },
+        {
           "type": "call",
           "named": true
         },
         {
           "type": "dict",
+          "named": true
+        },
+        {
+          "type": "environment_variable",
           "named": true
         },
         {
@@ -1903,6 +1966,18 @@
         },
         {
           "type": "external_call",
+          "named": true
+        },
+        {
+          "type": "len_call",
+          "named": true
+        },
+        {
+          "type": "method_id_call",
+          "named": true
+        },
+        {
+          "type": "min_max_call",
           "named": true
         },
         {
@@ -2365,11 +2440,35 @@
     "named": false
   },
   {
+    "type": "EMPTY_BYTES32",
+    "named": false
+  },
+  {
     "type": "False",
     "named": false
   },
   {
     "type": "HashMap",
+    "named": false
+  },
+  {
+    "type": "MAX_DECIMAL",
+    "named": false
+  },
+  {
+    "type": "MAX_INT128",
+    "named": false
+  },
+  {
+    "type": "MAX_UINT256",
+    "named": false
+  },
+  {
+    "type": "MIN_DECIMAL",
+    "named": false
+  },
+  {
+    "type": "MIN_INT128",
     "named": false
   },
   {
@@ -2382,6 +2481,10 @@
   },
   {
     "type": "UNREACHABLE",
+    "named": false
+  },
+  {
+    "type": "ZERO_ADDRESS",
     "named": false
   },
   {
@@ -2425,6 +2528,10 @@
     "named": false
   },
   {
+    "type": "block",
+    "named": false
+  },
+  {
     "type": "bool",
     "named": false
   },
@@ -2443,6 +2550,14 @@
   {
     "type": "bytes_literal",
     "named": true
+  },
+  {
+    "type": "chain",
+    "named": false
+  },
+  {
+    "type": "coinbase",
+    "named": false
   },
   {
     "type": "comment",
@@ -2470,7 +2585,15 @@
     "named": false
   },
   {
+    "type": "data",
+    "named": false
+  },
+  {
     "type": "def",
+    "named": false
+  },
+  {
+    "type": "difficulty",
     "named": false
   },
   {
@@ -2526,6 +2649,18 @@
     "named": false
   },
   {
+    "type": "gas",
+    "named": false
+  },
+  {
+    "type": "gasprice",
+    "named": false
+  },
+  {
+    "type": "id",
+    "named": false
+  },
+  {
     "type": "identifier",
     "named": true
   },
@@ -2562,12 +2697,32 @@
     "named": false
   },
   {
+    "type": "len",
+    "named": false
+  },
+  {
     "type": "line_continuation",
     "named": true,
     "extra": true
   },
   {
     "type": "log",
+    "named": false
+  },
+  {
+    "type": "max",
+    "named": false
+  },
+  {
+    "type": "method_id",
+    "named": false
+  },
+  {
+    "type": "min",
+    "named": false
+  },
+  {
+    "type": "msg",
     "named": false
   },
   {
@@ -2583,7 +2738,15 @@
     "named": false
   },
   {
+    "type": "number",
+    "named": false
+  },
+  {
     "type": "or",
+    "named": false
+  },
+  {
+    "type": "origin",
     "named": false
   },
   {
@@ -2597,6 +2760,10 @@
   {
     "type": "pragma_version",
     "named": true
+  },
+  {
+    "type": "prevhash",
+    "named": false
   },
   {
     "type": "public",
@@ -2619,7 +2786,15 @@
     "named": false
   },
   {
+    "type": "self",
+    "named": false
+  },
+  {
     "type": "send",
+    "named": false
+  },
+  {
+    "type": "sender",
     "named": false
   },
   {
@@ -2639,7 +2814,19 @@
     "named": false
   },
   {
+    "type": "timestamp",
+    "named": false
+  },
+  {
     "type": "transient",
+    "named": false
+  },
+  {
+    "type": "tx",
+    "named": false
+  },
+  {
+    "type": "value",
     "named": false
   },
   {
