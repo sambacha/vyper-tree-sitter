@@ -1,6 +1,6 @@
 {
   "name": "tree-sitter-vyper",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "EVM Pythonic Smart Contract Language",
   "repository": "https://github.com/vyperlang",
   "license": "MIT",
