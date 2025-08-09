@@ -1,0 +1,38 @@
+{
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/config.schema.json",
+  "grammars": [
+    {
+      "name": "vyper",
+      "camelcase": "Vyper",
+      "title": "Vyper",
+      "scope": "source.vyper",
+      "file-types": [
+        ".vy"
+      ],
+      "injection-regex": "^vyper$",
+      "class-name": "TreeSitterVyper"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "EVM Pythonic Smart Contract Language",
+    "authors": [
+      {
+        "name": "Sam Bacha"
+      }
+    ],
+    "links": {
+      "repository": "https://github.com/vyperlang"
+    }
+  },
+  "bindings": {
+    "c": true,
+    "go": true,
+    "node": true,
+    "python": true,
+    "rust": true,
+    "swift": true,
+    "zig": false
+  }
+}
