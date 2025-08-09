@@ -102,7 +102,7 @@ module.exports = grammar({
     _top_level_statement: $ => choice(
       $.import_statement,
       $.from_import_statement,
-      $.implements_declaration,
+      $.implements_statement,
       $.exports_declaration,
       $.struct_declaration,
       $.interface_declaration,
@@ -157,7 +157,7 @@ module.exports = grammar({
     // ==========================================
     // Declarations
     // ==========================================
-    implements_declaration: $ => seq(
+    implements_statement: $ => seq(
       'implements',
       ':',
       $.identifier,
@@ -184,7 +184,7 @@ module.exports = grammar({
     struct_member: $ => seq(
       field('name', $.identifier),
       ':',
-      field('type', $.type),
+      $.type,
       $._newline,
     ),
 

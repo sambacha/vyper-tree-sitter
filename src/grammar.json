@@ -166,7 +166,7 @@
         },
         {
           "type": "SYMBOL",
-          "name": "implements_declaration"
+          "name": "implements_statement"
         },
         {
           "type": "SYMBOL",
@@ -413,7 +413,7 @@
         }
       ]
     },
-    "implements_declaration": {
+    "implements_statement": {
       "type": "SEQ",
       "members": [
         {
@@ -508,12 +508,8 @@
           "value": ":"
         },
         {
-          "type": "FIELD",
-          "name": "type",
-          "content": {
-            "type": "SYMBOL",
-            "name": "type"
-          }
+          "type": "SYMBOL",
+          "name": "type"
         },
         {
           "type": "SYMBOL",

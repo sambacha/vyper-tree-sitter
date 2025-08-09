@@ -1175,7 +1175,7 @@
     }
   },
   {
-    "type": "implements_declaration",
+    "type": "implements_statement",
     "named": true,
     "fields": {},
     "children": {
@@ -1910,7 +1910,7 @@
           "named": true
         },
         {
-          "type": "implements_declaration",
+          "type": "implements_statement",
           "named": true
         },
         {
@@ -2087,17 +2087,17 @@
             "named": true
           }
         ]
-      },
-      "type": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "type",
-            "named": true
-          }
-        ]
       }
+    },
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "type",
+          "named": true
+        }
+      ]
     }
   },
   {
