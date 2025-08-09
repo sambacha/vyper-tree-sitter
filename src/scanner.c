@@ -151,12 +151,13 @@ bool tree_sitter_vyper_external_scanner_scan(
   
   DEBUG_PRINT("Scan called - valid symbols: NEWLINE=%d, INDENT=%d, DEDENT=%d\n",
     valid_symbols[NEWLINE], valid_symbols[INDENT], valid_symbols[DEDENT]);
-  DEBUG_PRINT("Current lookahead: '%c' (0x%02x), expecting_indent=%d\n", 
-    lexer->lookahead >= 32 ? lexer->lookahead : '?', lexer->lookahead, scanner->expecting_indent);
+  DEBUG_PRINT("Current lookahead: '%c' (0x%02x)\n", 
+    lexer->lookahead >= 32 ? lexer->lookahead : '?', lexer->lookahead);
 
   // Handle EOF - emit remaining dedents
   if (lexer->lookahead == 0) {
-    if (valid_symbols[DEDENT] && scanner->indent_count > 1) {
+    if (scanner->indent_count > 1) {
+      // Always try to emit DEDENT at EOF if we have indentation
       indent_pop(scanner);
       lexer->result_symbol = DEDENT;
       DEBUG_PRINT("Emitting DEDENT at EOF (remaining: %u)\n", scanner->indent_count - 1);
@@ -165,20 +166,99 @@ bool tree_sitter_vyper_external_scanner_scan(
     return false;
   }
 
-  // Skip any whitespace except newlines
-  bool found_whitespace = false;
+
+  // Handle indentation when INDENT is valid and we're at spaces/tabs
+  if (valid_symbols[INDENT] && (lexer->lookahead == ' ' || lexer->lookahead == '\t')) {
+    uint32_t indent_size = 0;
+    
+    // Count indentation
+    while (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
+      if (lexer->lookahead == '\t') {
+        indent_size += 8;
+      } else {
+        indent_size++;
+      }
+      lexer->advance(lexer, true);
+    }
+    
+    uint32_t current_indent = indent_top(scanner);
+    if (indent_size > current_indent) {
+      indent_push(scanner, indent_size);
+      lexer->result_symbol = INDENT;
+      DEBUG_PRINT("Emitting INDENT (level %u from %u)\n", indent_size, current_indent);
+      return true;
+    }
+  }
+
+  // Skip any remaining whitespace except newlines
   while (lexer->lookahead == ' ' || lexer->lookahead == '\t' || lexer->lookahead == '\r') {
-    found_whitespace = true;
     lexer->advance(lexer, true);
   }
 
-  // If we're not at a newline, we can't produce indent/dedent tokens
+  // Handle case where INDENT is expected and we're at a newline
+  if (valid_symbols[INDENT] && lexer->lookahead == '\n') {
+    // Skip the newline and check indentation
+    lexer->advance(lexer, true);
+    lexer->mark_end(lexer);
+    
+    uint32_t indent_size = 0;
+    // Skip blank lines and comments, count final indentation
+    while (true) {
+      indent_size = 0;
+      
+      // Count indentation
+      while (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
+        if (lexer->lookahead == '\t') {
+          indent_size += 8;
+        } else {
+          indent_size++;
+        }
+        lexer->advance(lexer, true);
+      }
+      
+      // Skip blank lines and comments
+      if (lexer->lookahead == '\n' || lexer->lookahead == '\r') {
+        lexer->advance(lexer, true);
+        lexer->mark_end(lexer);
+        continue;
+      } else if (lexer->lookahead == '#') {
+        while (lexer->lookahead != '\n' && lexer->lookahead != '\r' && lexer->lookahead != 0) {
+          lexer->advance(lexer, true);
+        }
+        if (lexer->lookahead == '\n' || lexer->lookahead == '\r') {
+          lexer->advance(lexer, true);
+          lexer->mark_end(lexer);
+        }
+        continue;
+      } else {
+        break; // Found actual content
+      }
+    }
+    
+    uint32_t current_indent = indent_top(scanner);
+    if (indent_size > current_indent) {
+      indent_push(scanner, indent_size);
+      lexer->result_symbol = INDENT;
+      DEBUG_PRINT("Emitting INDENT after newline (level %u from %u)\n", indent_size, current_indent);
+      return true;
+    }
+  }
+
+  // If we're not at a newline, we can't produce newline/dedent tokens
   if (lexer->lookahead != '\n') {
     DEBUG_PRINT("No newline found (lookahead: 0x%02x)\n", lexer->lookahead);
     return false;
   }
 
-  // Consume the newline
+  // If only NEWLINE is valid, emit NEWLINE and let the next call handle INDENT
+  if (valid_symbols[NEWLINE] && !valid_symbols[INDENT] && !valid_symbols[DEDENT]) {
+    lexer->advance(lexer, true);  // Consume newline
+    lexer->result_symbol = NEWLINE;
+    DEBUG_PRINT("Emitting NEWLINE\n");
+    return true;
+  }
+
+  // Consume the newline and mark it
   lexer->advance(lexer, true);
   lexer->mark_end(lexer);
 
