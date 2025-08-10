@@ -39,18 +39,10 @@ module.exports = grammar({
   ],
 
   conflicts: $ => [
-    [$.primary_expression, $.pattern],
-    [$.primary_expression, $.list_pattern],
     [$.primary_expression, $.identifier_pattern],
     [$.tuple, $.tuple_pattern],
     [$.list, $.list_pattern],
-    [$.attribute, $.attribute_pattern],
-    [$.subscript, $.subscript_pattern],
     [$.splat_pattern, $.splat_type],
-    [$.tuple_pattern, $.tuple],
-    [$.list_pattern, $.list],
-    [$.keyword_argument, $.pair],
-    [$.function_type, $.function_definition],
     [$.comparison, $.conditional_expression],
   ],
 
