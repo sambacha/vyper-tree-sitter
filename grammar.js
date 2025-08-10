@@ -35,6 +35,7 @@ module.exports = grammar({
   extras: $ => [
     /[\s\f\uFEFF\u2060\u200B]|\r?\n/,
     $.line_continuation,
+    $.comment,
   ],
 
   conflicts: $ => [
@@ -90,7 +91,6 @@ module.exports = grammar({
     pragma_version: $ => /\d+\.\d+\.\d+/,
 
     _top_level_statement: $ => choice(
-      $.comment,
       $.import_statement,
       $.from_import_statement,
       $.implements_statement,
@@ -532,7 +532,6 @@ module.exports = grammar({
       $._indent,
       repeat1(choice(
         $.statement,
-        $.comment,   // Allow comments within blocks
         $._newline,  // Allow blank lines in blocks
       )),
       $._dedent,
@@ -1011,7 +1010,7 @@ module.exports = grammar({
     // ==========================================
     // Comments and Identifiers
     // ==========================================
-    comment: $ => token(seq('#', /.*/)),
+    comment: $ => token(seq('#', /[^\r\n]*/)),
 
     line_continuation: $ => token(seq('\\', /\r?\n/)),
 

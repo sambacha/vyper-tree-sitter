@@ -158,10 +158,6 @@
       "members": [
         {
           "type": "SYMBOL",
-          "name": "comment"
-        },
-        {
-          "type": "SYMBOL",
           "name": "import_statement"
         },
         {
@@ -2204,10 +2200,6 @@
               {
                 "type": "SYMBOL",
                 "name": "statement"
-              },
-              {
-                "type": "SYMBOL",
-                "name": "comment"
               },
               {
                 "type": "SYMBOL",
@@ -4400,7 +4392,7 @@
           },
           {
             "type": "PATTERN",
-            "value": ".*"
+            "value": "[^\\r\\n]*"
           }
         ]
       }
@@ -4434,6 +4426,10 @@
     {
       "type": "SYMBOL",
       "name": "line_continuation"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "comment"
     }
   ],
   "conflicts": [
