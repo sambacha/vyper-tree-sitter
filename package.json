@@ -1,6 +1,6 @@
 {
   "name": "tree-sitter-vyper",
-  "version": "0.0.3",
+  "version": "0.0.5",
   "description": "EVM Pythonic Smart Contract Language",
   "repository": "https://github.com/vyperlang",
   "license": "MIT",
@@ -30,8 +30,13 @@
     "node-gyp-build": "^4.8.4"
   },
   "devDependencies": {
+    "@types/node": "^22.17.1",
+    "commander": "^14.0.0",
     "prebuildify": "^6.0.1",
-    "tree-sitter-cli": "^0.25.8"
+    "tree-sitter-cli": "^0.25.8",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2",
+    "web-tree-sitter": "^0.25.8"
   },
   "peerDependencies": {
     "tree-sitter": "^0.22.4"

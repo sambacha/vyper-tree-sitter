@@ -33,7 +33,6 @@ module.exports = grammar({
   name: "vyper",
 
   extras: $ => [
-    $.comment,
     /[\s\f\uFEFF\u2060\u200B]|\r?\n/,
     $.line_continuation,
   ],
@@ -43,7 +42,6 @@ module.exports = grammar({
     [$.tuple, $.tuple_pattern],
     [$.list, $.list_pattern],
     [$.splat_pattern, $.splat_type],
-    [$.comparison, $.conditional_expression],
   ],
 
   supertypes: $ => [
@@ -92,6 +90,7 @@ module.exports = grammar({
     pragma_version: $ => /\d+\.\d+\.\d+/,
 
     _top_level_statement: $ => choice(
+      $.comment,
       $.import_statement,
       $.from_import_statement,
       $.implements_statement,
@@ -418,6 +417,7 @@ module.exports = grammar({
         $.augmented_assignment,
         $.annotated_assignment,
       ),
+      optional($.comment),  // Allow trailing comments
       $._newline,
     ),
 
@@ -532,127 +532,135 @@ module.exports = grammar({
       $._indent,
       repeat1(choice(
         $.statement,
+        $.comment,   // Allow comments within blocks
         $._newline,  // Allow blank lines in blocks
       )),
       $._dedent,
     ),
 
     // ==========================================
-    // Expressions (with precedence)
+    // Expressions (with proper precedence layers)
     // ==========================================
-    expression: $ => choice(
-      $.comparison,
-      $.not_operator,
-      $.boolean_operator,
-      $.binary_operator,
-      $.unary_operator,
-      $.conditional_expression,
-      $.walrus_operator,
-      $.primary_expression,
+    expression: $ => $.conditional_expression,
+
+    conditional_expression: $ => choice(
+      $.or_expression,
+      prec.right(PREC.ternary, seq(
+        $.or_expression,
+        'if',
+        $.or_expression,
+        'else',
+        $.conditional_expression,
+      )),
     ),
 
-    comparison: $ => prec.left(PREC.compare, seq(
-      $.expression,
-      repeat1(seq(
-        field('operator', choice(
-          '<', '<=', '==', '!=', '>=', '>',
-          'in', seq('not', 'in'),
-        )),
-        $.expression,
-      )),
-    )),
-
-    not_operator: $ => prec(PREC.not, seq('not', $.expression)),
-
-    boolean_operator: $ => choice(
-      prec.left(PREC.and, seq(
-        field('left', $.expression),
-        'and',
-        field('right', $.expression)
-      )),
+    or_expression: $ => choice(
+      $.and_expression,
       prec.left(PREC.or, seq(
-        field('left', $.expression),
+        field('left', $.or_expression),
         'or',
-        field('right', $.expression)
+        field('right', $.and_expression)
       )),
     ),
 
-    binary_operator: $ => choice(
-      prec.left(PREC.plus, seq(
-        field('left', $.expression),
-        '+',
-        field('right', $.expression)
+    and_expression: $ => choice(
+      $.not_expression,
+      prec.left(PREC.and, seq(
+        field('left', $.and_expression),
+        'and',
+        field('right', $.not_expression)
       )),
-      prec.left(PREC.plus, seq(
-        field('left', $.expression),
-        '-',
-        field('right', $.expression)
+    ),
+
+    not_expression: $ => choice(
+      $.comparison_expression,
+      prec(PREC.not, seq('not', $.not_expression)),
+    ),
+
+    comparison_expression: $ => choice(
+      $.bitwise_or_expression,
+      prec.left(PREC.compare, seq(
+        $.bitwise_or_expression,
+        repeat1(seq(
+          field('operator', choice(
+            '<', '<=', '==', '!=', '>=', '>',
+            'in', seq('not', 'in'),
+          )),
+          $.bitwise_or_expression,
+        )),
       )),
-      prec.left(PREC.times, seq(
-        field('left', $.expression),
-        '*',
-        field('right', $.expression)
-      )),
-      prec.left(PREC.times, seq(
-        field('left', $.expression),
-        '/',
-        field('right', $.expression)
-      )),
-      prec.left(PREC.times, seq(
-        field('left', $.expression),
-        '//',
-        field('right', $.expression)
-      )),
-      prec.left(PREC.times, seq(
-        field('left', $.expression),
-        '%',
-        field('right', $.expression)
-      )),
-      prec.right(PREC.power, seq(
-        field('left', $.expression),
-        '**',
-        field('right', $.expression)
-      )),
-      prec.left(PREC.shift, seq(
-        field('left', $.expression),
-        '<<',
-        field('right', $.expression)
-      )),
-      prec.left(PREC.shift, seq(
-        field('left', $.expression),
-        '>>',
-        field('right', $.expression)
-      )),
-      prec.left(PREC.bitwise_and, seq(
-        field('left', $.expression),
-        '&',
-        field('right', $.expression)
-      )),
+    ),
+
+    bitwise_or_expression: $ => choice(
+      $.bitwise_xor_expression,
       prec.left(PREC.bitwise_or, seq(
-        field('left', $.expression),
+        field('left', $.bitwise_or_expression),
         '|',
-        field('right', $.expression)
-      )),
-      prec.left(PREC.bitwise_xor, seq(
-        field('left', $.expression),
-        '^',
-        field('right', $.expression)
+        field('right', $.bitwise_xor_expression)
       )),
     ),
 
-    unary_operator: $ => prec(PREC.unary, choice(
-      seq('+', $.expression),
-      seq('-', $.expression),
-      seq('~', $.expression),
-    )),
+    bitwise_xor_expression: $ => choice(
+      $.bitwise_and_expression,
+      prec.left(PREC.bitwise_xor, seq(
+        field('left', $.bitwise_xor_expression),
+        '^',
+        field('right', $.bitwise_and_expression)
+      )),
+    ),
 
-    conditional_expression: $ => prec.right(PREC.ternary, seq(
-      $.expression,
-      'if',
-      $.expression,
-      'else',
-      $.expression,
-    )),
+    bitwise_and_expression: $ => choice(
+      $.shift_expression,
+      prec.left(PREC.bitwise_and, seq(
+        field('left', $.bitwise_and_expression),
+        '&',
+        field('right', $.shift_expression)
+      )),
+    ),
+
+    shift_expression: $ => choice(
+      $.arithmetic_expression,
+      prec.left(PREC.shift, seq(
+        field('left', $.shift_expression),
+        choice('<<', '>>'),
+        field('right', $.arithmetic_expression)
+      )),
+    ),
+
+    arithmetic_expression: $ => choice(
+      $.term_expression,
+      prec.left(PREC.plus, seq(
+        field('left', $.arithmetic_expression),
+        choice('+', '-'),
+        field('right', $.term_expression)
+      )),
+    ),
+
+    term_expression: $ => choice(
+      $.power_expression,
+      prec.left(PREC.times, seq(
+        field('left', $.term_expression),
+        choice('*', '/', '//', '%'),
+        field('right', $.power_expression)
+      )),
+    ),
+
+    power_expression: $ => choice(
+      $.unary_expression,
+      prec.right(PREC.power, seq(
+        field('left', $.unary_expression),
+        '**',
+        field('right', $.power_expression)
+      )),
+    ),
+
+    unary_expression: $ => choice(
+      $.primary_expression,
+      prec(PREC.unary, seq(
+        choice('+', '-', '~', 'not'),
+        $.unary_expression
+      )),
+    ),
 
     walrus_operator: $ => prec.left(1, seq(
       $.identifier,

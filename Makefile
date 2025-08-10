@@ -4,7 +4,7 @@ endif
 
 LANGUAGE_NAME := tree-sitter-vyper
 HOMEPAGE_URL := https://github.com/vyperlang
-VERSION := 0.1.0
+VERSION := 0.0.5
 
 # repository
 SRC_DIR := src

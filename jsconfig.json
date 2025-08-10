@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "module": "CommonJS",
+    "target": "ES6",
+    "checkJs": true,
+    "types": ["tree-sitter-cli/dsl", "node"]
+  },
+  "include": ["grammar.js", "src/**/*"]
+}
