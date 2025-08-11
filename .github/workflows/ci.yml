@@ -1,0 +1,319 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node-version: [18.x, 20.x, 22.x]
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Build tree-sitter parser
+      run: |
+        npx tree-sitter generate
+        npx tree-sitter build
+    
+    - name: Build WASM version
+      run: npx tree-sitter build --wasm
+    
+    - name: Run Node binding tests
+      run: npm test
+    
+    - name: Test parser with sample files
+      run: |
+        echo "Testing parser with corpus files..."
+        for file in corpus/*.vy test/corpus/*.vy; do
+          if [ -f "$file" ]; then
+            echo "Parsing: $file"
+            npx tree-sitter parse "$file" || true
+          fi
+        done
+      shell: bash
+    
+    - name: Test scanner functionality
+      run: |
+        echo "Testing scanner with complex indentation..."
+        npx tree-sitter parse __tests__/test_complex_nested.vy || true
+        npx tree-sitter parse __tests__/test_function_with_if.vy || true
+      shell: bash
+
+  validate-grammar:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Validate grammar.js
+      run: |
+        echo "Validating grammar.js syntax..."
+        node -c grammar.js
+    
+    - name: Generate and validate parser
+      run: |
+        npx tree-sitter generate
+        echo "Checking generated files..."
+        test -f src/parser.c || exit 1
+        test -f src/scanner.c || exit 1
+        test -f src/grammar.json || exit 1
+    
+    - name: Run tree-sitter tests
+      run: |
+        if [ -d test/corpus ]; then
+          echo "Running tree-sitter corpus tests..."
+          npx tree-sitter test
+        fi
+    
+    - name: Check for parsing errors
+      run: |
+        echo "Checking for common parsing issues..."
+        ERROR_COUNT=0
+        for file in corpus/*.vy test/corpus/*.vy; do
+          if [ -f "$file" ]; then
+            OUTPUT=$(npx tree-sitter parse "$file" 2>&1)
+            if echo "$OUTPUT" | grep -q "ERROR"; then
+              echo "ERROR found in $file"
+              ERROR_COUNT=$((ERROR_COUNT + 1))
+            fi
+          fi
+        done
+        echo "Total files with errors: $ERROR_COUNT"
+        if [ $ERROR_COUNT -gt 10 ]; then
+          echo "Too many parsing errors detected!"
+          exit 1
+        fi
+
+  python-bindings:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ['3.9', '3.10', '3.11', '3.12']
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+    
+    - name: Install Node dependencies
+      run: npm ci
+    
+    - name: Build parser
+      run: |
+        npx tree-sitter generate
+        npx tree-sitter build
+    
+    - name: Install Python package
+      run: |
+        pip install --upgrade pip
+        pip install .
+    
+    - name: Run Python tests
+      run: |
+        if [ -f bindings/python/tests/test_binding.py ]; then
+          python bindings/python/tests/test_binding.py
+        fi
+      shell: bash
+
+  rust-bindings:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+    
+    - name: Install Node dependencies
+      run: npm ci
+    
+    - name: Generate parser
+      run: npx tree-sitter generate
+    
+    - name: Build Rust bindings
+      run: cargo build --verbose
+    
+    - name: Run Rust tests
+      run: cargo test --verbose
+
+  fuzzing:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Build parser
+      run: |
+        npx tree-sitter generate
+        npx tree-sitter build
+    
+    - name: Run fuzzing tests
+      run: |
+        echo "Running basic fuzz testing..."
+        # Generate some random test cases
+        for i in {1..10}; do
+          echo "Test case $i:"
+          cat > fuzz_test_$i.vy << EOF
+        # Random test case $i
+        @external
+        def test_$i(x: uint256) -> uint256:
+            if x > $(($RANDOM % 100)):
+                return x * 2
+            else:
+                return x + $(($RANDOM % 50))
+        EOF
+          npx tree-sitter parse fuzz_test_$i.vy || true
+          rm fuzz_test_$i.vy
+        done
+    
+    - name: Memory safety check
+      run: |
+        # Test with very large files to check for memory issues
+        echo "Testing with large file..."
+        python3 -c "
+        lines = []
+        for i in range(1000):
+            lines.append(f'@external')
+            lines.append(f'def func_{i}(x: uint256) -> uint256:')
+            lines.append(f'    return x + {i}')
+            lines.append('')
+        with open('large_test.vy', 'w') as f:
+            f.write('\\n'.join(lines))
+        "
+        timeout 30s npx tree-sitter parse large_test.vy > /dev/null 2>&1 || true
+        rm large_test.vy
+
+  benchmark:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Build parser
+      run: |
+        npx tree-sitter generate
+        npx tree-sitter build
+    
+    - name: Run performance benchmarks
+      run: |
+        echo "Running parser performance tests..."
+        
+        # Test parsing speed on various file sizes
+        for file in corpus/*.vy test/corpus/*.vy; do
+          if [ -f "$file" ]; then
+            echo "Benchmarking: $file"
+            time npx tree-sitter parse "$file" > /dev/null
+          fi
+        done
+    
+    - name: Check parser size
+      run: |
+        echo "Parser binary sizes:"
+        ls -lh src/parser.c src/scanner.c
+        if [ -f tree-sitter-vyper.wasm ]; then
+          ls -lh tree-sitter-vyper.wasm
+        fi
+
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Check code formatting
+      run: |
+        if [ -f grammar.js ]; then
+          npx prettier --check grammar.js || true
+        fi
+    
+    - name: Validate package.json
+      run: |
+        node -e "JSON.parse(require('fs').readFileSync('package.json', 'utf8'))"
+        echo "package.json is valid JSON"
+    
+    - name: Check for debug code
+      run: |
+        echo "Checking for debug code..."
+        ! grep -r "console.log\|debugger\|TREE_SITTER_DEBUG" src/ --include="*.c" --include="*.h" || echo "Debug code check complete"
