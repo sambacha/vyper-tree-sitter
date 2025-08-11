@@ -50,3 +50,23 @@ zig-out/
 *.tar.gz
 *.tgz
 *.zip
+
+###### 
+        debug_else_issue.vy
+        test_built_ins.vy
+        test_comprehensive.vy
+        test_debug_blocks.vy
+        test_debug_boundary.vy
+        test_decorated.vy
+        test_final_validation.vy
+        test_for_only.vy
+        test_if_only.vy
+        test_individual_cases.vy
+        test_issues.vy
+        test_just_if_else.vy
+        test_minimal_control_flow.vy
+        test_minimal_statements.vy
+        test_multiple_functions.vy
+        test_simple_constructs.vy
+        test_success_summary.vy
+        test_two_simple_functions.vy

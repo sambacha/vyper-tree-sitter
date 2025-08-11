@@ -9,34 +9,60 @@
 // @ts-check
 
 const PREC = {
-  // Precedence levels (higher number = higher precedence)
-  ternary: 0,
-  parenthesized: 1,
-  or: 2,
-  and: 3,
-  not: 4,
-  compare: 5,
-  bitwise_or: 6,
-  bitwise_xor: 7,
-  bitwise_and: 8,
-  shift: 9,
-  plus: 10,
-  times: 11,
-  unary: 12,
-  power: 13,
-  call: 14,
-  attribute: 15,
-  subscript: 16,
+  // Precedence levels (lower number = higher precedence, following standard convention)
+  // Primary expressions have highest precedence
+  PRIMARY: 0,           // Parentheses, literals (highest)
+  CALL: 1,             // Function calls
+  SUBSCRIPT: 1,        // Array/mapping access x[i]
+  ATTRIBUTE: 1,        // Attribute access x.y
+  
+  // Unary and power
+  POWER: 2,            // ** (right associative)
+  UNARY: 3,            // +x, -x, ~x, not x
+  
+  // Arithmetic
+  TIMES: 4,            // *, /, //, %
+  PLUS: 5,             // +, -
+  
+  // Bitwise
+  SHIFT: 6,            // <<, >>
+  BITWISE_AND: 7,      // &
+  BITWISE_XOR: 8,      // ^
+  BITWISE_OR: 9,       // |
+  
+  // Comparison and logical
+  COMPARE: 10,         // ==, !=, <, >, <=, >=, in, not in
+  LOGICAL_NOT: 11,     // not
+  LOGICAL_AND: 12,     // and
+  LOGICAL_OR: 13,      // or
+  
+  // Conditionals and assignment
+  TERNARY: 14,         // x if condition else y
+  WALRUS: 15,          // := (walrus operator)
+  ASSIGN: 16,          // =, +=, -=, etc.
+  COMMA: 17,           // , (lowest precedence)
+  
+  // Context-sensitive precedences
+  ARRAY_TYPE: 3,       // Type context for arrays
+  ARRAY_ACCESS: 1,     // Expression context for arrays
+  TYPE_CONTEXT: 2,     // General type context
+  EXPRESSION_CONTEXT: 1, // General expression context
+  
+  // Special
+  DOCSTRING: 0,        // NatSpec docstrings
+  DECORATOR: 0,        // @external, @view, etc.
 };
 
 module.exports = grammar({
   name: "vyper",
 
-  extras: $ => [
-    /[\s\f\uFEFF\u2060\u200B]|\r?\n/,
-    $.line_continuation,
-    $.comment,
-  ],
+    // Extras is an array of tokens that is allowed anywhere in the document.
+    extras: $ => [
+        // Allow comments to be placed anywhere in the file
+        $.comment,
+        // Allow characters such as whitespaces to be placed anywhere in the file
+        /[\s\uFEFF\u2060\u200B\u00A0]/
+    ],
 
   conflicts: $ => [
     [$.primary_expression, $.identifier_pattern],
@@ -69,28 +95,26 @@ module.exports = grammar({
       repeat($._top_level_statement),
     ),
 
-    pragma_directive: $ => seq(
+    pragma_directive: $ => token(prec(1, seq(
       '#pragma',
+      /\s+/,
       'version',
+      /\s+/,
       choice(
-        $.pragma_version_constraint,
-        seq('^', $.pragma_version),
-        seq('~', $.pragma_version),
-        $.pragma_version,
+        />[0-9]+\.[0-9]+\.[0-9]+/,
+        />=[0-9]+\.[0-9]+\.[0-9]+/,
+        /<[0-9]+\.[0-9]+\.[0-9]+/,
+        /<=[0-9]+\.[0-9]+\.[0-9]+/,
+        /==[0-9]+\.[0-9]+\.[0-9]+/,
+        /\^[0-9]+\.[0-9]+\.[0-9]+/,
+        /~[0-9]+\.[0-9]+\.[0-9]+/,
+        /[0-9]+\.[0-9]+\.[0-9]+/,
       ),
-    ),
+    ))),
 
-    pragma_version_constraint: $ => choice(
-      seq('>', $.pragma_version),
-      seq('>=', $.pragma_version),
-      seq('<', $.pragma_version),
-      seq('<=', $.pragma_version),
-      seq('==', $.pragma_version),
-    ),
-
-    pragma_version: $ => /\d+\.\d+\.\d+/,
 
     _top_level_statement: $ => choice(
+      $.docstring,  // NatSpec module-level documentation
       $.import_statement,
       $.from_import_statement,
       $.implements_statement,
@@ -336,15 +360,25 @@ module.exports = grammar({
       'bytes',
       'string',
       'String',
-      /uint(8|16|32|64|128|256)?/,
-      /int(8|16|32|64|128|256)?/,
-      /bytes([1-9]|[12][0-9]|3[0-2])?/,
+      'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'uint128', 'uint256',
+      'int', 'int8', 'int16', 'int32', 'int64', 'int128', 'int256',
+      'bytes1', 'bytes2', 'bytes3', 'bytes4', 'bytes5', 'bytes6', 'bytes7', 'bytes8',
+      'bytes9', 'bytes10', 'bytes11', 'bytes12', 'bytes13', 'bytes14', 'bytes15', 'bytes16',
+      'bytes17', 'bytes18', 'bytes19', 'bytes20', 'bytes21', 'bytes22', 'bytes23', 'bytes24',
+      'bytes25', 'bytes26', 'bytes27', 'bytes28', 'bytes29', 'bytes30', 'bytes31',
     ),
 
-    array_type: $ => prec(1, seq(
+    array_type: $ => prec(PREC.ARRAY_TYPE, seq(
       $.type,
       '[',
-      $.expression,
+      choice(
+        $.integer,           // Direct integer literals: [5], [256]
+        $.identifier,        // Named constants: [MAX_SIZE]
+        seq(                 // Qualified constants: [module.CONSTANT]
+          $.identifier,
+          repeat1(seq('.', $.identifier))
+        ),
+      ),
       ']',
     )),
 
@@ -456,7 +490,7 @@ module.exports = grammar({
       ')',
     ),
 
-    assignment: $ => seq(
+    assignment: $ => prec.right(PREC.ASSIGN, seq(
       field('left', choice(
         $.identifier,
         $.attribute,
@@ -466,9 +500,9 @@ module.exports = grammar({
       )),
       '=',
       field('right', $.expression),
-    ),
+    )),
 
-    augmented_assignment: $ => seq(
+    augmented_assignment: $ => prec.right(PREC.ASSIGN, seq(
       field('left', choice(
         $.identifier,
         $.attribute,
@@ -479,7 +513,7 @@ module.exports = grammar({
         '&=', '|=', '^=', '<<=', '>>=',
       )),
       field('right', $.expression),
-    ),
+    )),
 
     annotated_assignment: $ => seq(
       field('target', $.identifier),
@@ -544,7 +578,7 @@ module.exports = grammar({
 
     conditional_expression: $ => choice(
       $.or_expression,
-      prec.right(PREC.ternary, seq(
+      prec.right(PREC.TERNARY, seq(
         $.or_expression,
         'if',
         $.or_expression,
@@ -555,7 +589,7 @@ module.exports = grammar({
 
     or_expression: $ => choice(
       $.and_expression,
-      prec.left(PREC.or, seq(
+      prec.left(PREC.LOGICAL_OR, seq(
         field('left', $.or_expression),
         'or',
         field('right', $.and_expression)
@@ -564,7 +598,7 @@ module.exports = grammar({
 
     and_expression: $ => choice(
       $.not_expression,
-      prec.left(PREC.and, seq(
+      prec.left(PREC.LOGICAL_AND, seq(
         field('left', $.and_expression),
         'and',
         field('right', $.not_expression)
@@ -573,12 +607,12 @@ module.exports = grammar({
 
     not_expression: $ => choice(
       $.comparison_expression,
-      prec(PREC.not, seq('not', $.not_expression)),
+      prec(PREC.LOGICAL_NOT, seq('not', $.not_expression)),
     ),
 
     comparison_expression: $ => choice(
       $.bitwise_or_expression,
-      prec.left(PREC.compare, seq(
+      prec.left(PREC.COMPARE, seq(
         $.bitwise_or_expression,
         repeat1(seq(
           field('operator', choice(
@@ -592,7 +626,7 @@ module.exports = grammar({
 
     bitwise_or_expression: $ => choice(
       $.bitwise_xor_expression,
-      prec.left(PREC.bitwise_or, seq(
+      prec.left(PREC.BITWISE_OR, seq(
         field('left', $.bitwise_or_expression),
         '|',
         field('right', $.bitwise_xor_expression)
@@ -601,7 +635,7 @@ module.exports = grammar({
 
     bitwise_xor_expression: $ => choice(
       $.bitwise_and_expression,
-      prec.left(PREC.bitwise_xor, seq(
+      prec.left(PREC.BITWISE_XOR, seq(
         field('left', $.bitwise_xor_expression),
         '^',
         field('right', $.bitwise_and_expression)
@@ -610,7 +644,7 @@ module.exports = grammar({
 
     bitwise_and_expression: $ => choice(
       $.shift_expression,
-      prec.left(PREC.bitwise_and, seq(
+      prec.left(PREC.BITWISE_AND, seq(
         field('left', $.bitwise_and_expression),
         '&',
         field('right', $.shift_expression)
@@ -619,7 +653,7 @@ module.exports = grammar({
 
     shift_expression: $ => choice(
       $.arithmetic_expression,
-      prec.left(PREC.shift, seq(
+      prec.left(PREC.SHIFT, seq(
         field('left', $.shift_expression),
         choice('<<', '>>'),
         field('right', $.arithmetic_expression)
@@ -628,7 +662,7 @@ module.exports = grammar({
 
     arithmetic_expression: $ => choice(
       $.term_expression,
-      prec.left(PREC.plus, seq(
+      prec.left(PREC.PLUS, seq(
         field('left', $.arithmetic_expression),
         choice('+', '-'),
         field('right', $.term_expression)
@@ -637,7 +671,7 @@ module.exports = grammar({
 
     term_expression: $ => choice(
       $.power_expression,
-      prec.left(PREC.times, seq(
+      prec.left(PREC.TIMES, seq(
         field('left', $.term_expression),
         choice('*', '/', '//', '%'),
         field('right', $.power_expression)
@@ -646,7 +680,7 @@ module.exports = grammar({
 
     power_expression: $ => choice(
       $.unary_expression,
-      prec.right(PREC.power, seq(
+      prec.right(PREC.POWER, seq(
         field('left', $.unary_expression),
         '**',
         field('right', $.power_expression)
@@ -655,13 +689,13 @@ module.exports = grammar({
 
     unary_expression: $ => choice(
       $.primary_expression,
-      prec(PREC.unary, seq(
+      prec(PREC.UNARY, seq(
         choice('+', '-', '~', 'not'),
         $.unary_expression
       )),
     ),
 
-    walrus_operator: $ => prec.left(1, seq(
+    walrus_operator: $ => prec.right(PREC.WALRUS, seq(
       $.identifier,
       ':=',
       $.expression,
@@ -682,13 +716,13 @@ module.exports = grammar({
       $.special_call,
     ),
 
-    attribute: $ => prec(PREC.attribute, seq(
+    attribute: $ => prec(PREC.ATTRIBUTE, seq(
       field('object', $.primary_expression),
       '.',
       field('attribute', $.identifier),
     )),
 
-    subscript: $ => prec(PREC.subscript, seq(
+    subscript: $ => prec(PREC.SUBSCRIPT, seq(
       field('object', $.primary_expression),
       '[',
       field('index', choice($.expression, $.slice)),
@@ -702,7 +736,7 @@ module.exports = grammar({
       optional(seq(':', optional($.expression))),
     ),
 
-    call: $ => prec(PREC.call, seq(
+    call: $ => prec(PREC.CALL, seq(
       field('function', $.primary_expression),
       '(',
       optional(field('arguments', $.argument_list)),
@@ -870,7 +904,7 @@ module.exports = grammar({
       optional(','),
     ),
 
-    parenthesized_expression: $ => prec(PREC.parenthesized, seq(
+    parenthesized_expression: $ => prec(PREC.PRIMARY, seq(
       '(',
       $.expression,
       ')',
@@ -1010,7 +1044,17 @@ module.exports = grammar({
     // ==========================================
     // Comments and Identifiers
     // ==========================================
-    comment: $ => token(seq('#', /[^\r\n]*/)),
+    comment: $ => token(prec(-1, seq('#', /[^\r\n]*/))),
+    
+    // NatSpec documentation strings (triple-quoted)
+    docstring: $ => prec(PREC.DOCSTRING, 
+      choice(
+        // Triple single quotes
+        /'''([^']|'[^']|''[^'])*'''/,
+        // Triple double quotes  
+        /"""([^"]|"[^"]|""[^"])*"""/,
+      )
+    ),
 
     line_continuation: $ => token(seq('\\', /\r?\n/)),
 
